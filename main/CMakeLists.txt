@@ -1,0 +1,3 @@
+idf_component_register(SRCS "main.c"
+                    INCLUDE_DIRS "."
+                    REQUIRES bh1750 ina219 wifi nvs_flash mqtt_service mqtt json)
