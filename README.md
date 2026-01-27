@@ -52,6 +52,15 @@ O projeto Lumina é um sistema completo para monitoramento de placas solares, in
     npm run dev
     ```
 
+### Modo de Demonstração (Sem Backend)
+
+Se você quiser visualizar as telas do frontend sem precisar rodar o backend ou configurar o MongoDB:
+1. No arquivo `frontend/.env`, defina:
+   ```env
+   VITE_USE_MOCK=true
+   ```
+2. Reinicie o servidor do frontend. Agora você pode fazer login com qualquer email/senha e verá dados de exemplo nos gráficos e tabelas.
+
 ## Regra de Alerta (Limpeza)
 
 O sistema possui uma regra inteligente para detectar se a placa solar precisa de limpeza:
