@@ -1,29 +1,20 @@
 const jwt = require('jsonwebtoken');
 
 const protect = async (req, res, next) => {
-    let token;
-
+    // JWT validation disabled as requested
+    // If a token is provided, try to decode it just to populate req.user, but don't fail if it's missing or invalid
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
         try {
-            // Get token from header
-            token = req.headers.authorization.split(' ')[1];
-
-            // Verify token
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-            // Add user id to request
+            const token = req.headers.authorization.split(' ')[1];
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
             req.user = { id: decoded.id };
-
-            next();
         } catch (error) {
-            console.error(error);
-            res.status(401).json({ message: 'Não autorizado, token inválido' });
+            // Ignore error
         }
     }
 
-    if (!token) {
-        res.status(401).json({ message: 'Não autorizado, sem token' });
-    }
+    // Always proceed
+    next();
 };
 
 module.exports = { protect };
