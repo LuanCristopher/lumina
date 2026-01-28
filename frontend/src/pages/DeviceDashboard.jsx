@@ -4,6 +4,7 @@ import api from '../api/axios';
 import Layout from '../components/Layout';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { ArrowLeft, Zap, ThermometerSun, Activity, Sun, TrendingUp, TrendingDown } from 'lucide-react';
+import formatPower from '../utils/formatPower';
 
 const DeviceDashboard = () => {
     const { id } = useParams();
@@ -66,7 +67,14 @@ const DeviceDashboard = () => {
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm text-gray-500 font-medium">Potência</p>
-                            <h3 className="text-2xl font-bold">{(lastReading.power_w || 0).toFixed(3)} W</h3>
+                            {(() => {
+                                const p = formatPower(lastReading.power_w);
+                                return (
+                                    <h3 className="text-2xl font-bold">
+                                        {p.value} <span className="text-base font-medium text-gray-500">{p.unit}</span>
+                                    </h3>
+                                );
+                            })()}
                         </div>
                         <Zap className="h-8 w-8 text-yellow-500" />
                     </div>
@@ -106,7 +114,14 @@ const DeviceDashboard = () => {
                     <div className="mb-4 md:mb-0">
                         <p className="text-sm text-gray-500 font-medium">Média de produção (últimos 2 dias)</p>
                         <div className="flex items-baseline">
-                            <h3 className="text-xl font-bold text-gray-800">{stats.avgPower2Days.toFixed(3)} W</h3>
+                            {(() => {
+                                const p = formatPower(stats.avgPower2Days);
+                                return (
+                                    <h3 className="text-xl font-bold text-gray-800">
+                                        {p.value} <span className="text-sm font-medium text-gray-500">{p.unit}</span>
+                                    </h3>
+                                );
+                            })()}
                             <span className="ml-2 text-xs text-gray-400 font-normal">* Apenas com luz alta (&gt;15k lx)</span>
                         </div>
                     </div>
@@ -137,7 +152,18 @@ const DeviceDashboard = () => {
                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
                             <XAxis dataKey="time" hide />
                             <YAxis />
-                            <Tooltip />
+                            <Tooltip
+                                formatter={(value, name) => {
+                                    if (name === "Potência") {
+                                        const p = formatPower(value);
+                                        return [`${p.value} ${p.unit}`, name];
+                                    }
+                                    if (name === "Lum. / 1000") {
+                                        return [value.toFixed(1), name];
+                                    }
+                                    return [value, name];
+                                }}
+                            />
                             <Legend />
                             <Line
                                 type="monotone"
@@ -145,7 +171,7 @@ const DeviceDashboard = () => {
                                 stroke="#eab308"
                                 strokeWidth={3}
                                 dot={false}
-                                name="Potência (W)"
+                                name="Potência"
                             />
                             <Line
                                 type="monotone"
