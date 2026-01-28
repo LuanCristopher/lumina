@@ -1,4 +1,3 @@
-const mongoose = require('mongoose');
 const Alert = require('../models/Alert');
 const Reading = require('../models/Reading');
 
