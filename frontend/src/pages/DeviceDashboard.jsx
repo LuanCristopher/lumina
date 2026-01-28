@@ -3,24 +3,27 @@ import { useParams, Link } from 'react-router-dom';
 import api from '../api/axios';
 import Layout from '../components/Layout';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { ArrowLeft, Zap, ThermometerSun, Activity, Sun } from 'lucide-react';
+import { ArrowLeft, Zap, ThermometerSun, Activity, Sun, TrendingUp, TrendingDown } from 'lucide-react';
 
 const DeviceDashboard = () => {
     const { id } = useParams();
     const [device, setDevice] = useState(null);
     const [readings, setReadings] = useState([]);
+    const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
 
     const fetchData = async () => {
         try {
-            const [deviceRes, readingsRes] = await Promise.all([
+            const [deviceRes, readingsRes, statsRes] = await Promise.all([
                 api.get(`/devices`), // Need to find the specific device from the list as there's no GET /devices/:id
-                api.get(`/devices/${id}/readings?limit=50`)
+                api.get(`/devices/${id}/readings?limit=50`),
+                api.get(`/devices/${id}/stats`)
             ]);
 
             const foundDevice = deviceRes.data.find(d => d._id === id);
             setDevice(foundDevice);
             setReadings(readingsRes.data.reverse()); // Reverse to show chronologically in chart
+            setStats(statsRes.data);
         } catch (err) {
             console.error('Erro ao buscar dados do device', err);
         } finally {
@@ -58,7 +61,7 @@ const DeviceDashboard = () => {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-white p-6 rounded-lg shadow border-l-4 border-yellow-500">
                     <div className="flex items-center justify-between">
                         <div>
@@ -96,6 +99,34 @@ const DeviceDashboard = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Historical Stats Section */}
+            {stats && (
+                <div className="bg-white p-4 rounded-lg shadow mb-8 flex flex-col md:flex-row items-center justify-between border-t border-gray-100">
+                    <div className="mb-4 md:mb-0">
+                        <p className="text-sm text-gray-500 font-medium">Média de produção (últimos 2 dias)</p>
+                        <div className="flex items-baseline">
+                            <h3 className="text-xl font-bold text-gray-800">{stats.avgPower2Days.toFixed(3)} W</h3>
+                            <span className="ml-2 text-xs text-gray-400 font-normal">* Apenas com luz alta (&gt;15k lx)</span>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center bg-gray-50 px-4 py-2 rounded-full">
+                        <span className="text-sm mr-3 font-medium text-gray-600">Status atual:</span>
+                        {lastReading.power_w >= stats.avgPower2Days ? (
+                            <div className="flex items-center text-green-600">
+                                <TrendingUp className="h-5 w-5 mr-1" />
+                                <span className="font-bold">Acima da média</span>
+                            </div>
+                        ) : (
+                            <div className="flex items-center text-red-500">
+                                <TrendingDown className="h-5 w-5 mr-1" />
+                                <span className="font-bold">Abaixo da média</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Chart */}
             <div className="bg-white p-6 rounded-lg shadow mb-8">
