@@ -1,23 +1,49 @@
+const mongoose = require('mongoose');
 const Alert = require('../models/Alert');
+const Reading = require('../models/Reading');
 
-const LUX_HIGH_THRESHOLD = parseFloat(process.env.LUX_HIGH_THRESHOLD) || 10000;
-const POWER_LOW_THRESHOLD = parseFloat(process.env.POWER_LOW_THRESHOLD) || 0.3;
-const ALERT_CONSECUTIVE_N = parseInt(process.env.ALERT_CONSECUTIVE_N) || 3;
-
-// Map to keep track of consecutive bad readings per device
-const consecutiveBadReadings = new Map();
+const LUX_HIGH_THRESHOLD = 15000;
+const POWER_LOW_THRESHOLD = 0.2;
+const ALERT_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+const RESOLVE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const ALERT_THRESHOLD_RATIO = 0.8; // 80%
 
 const processReadingForAlerts = async (reading, device) => {
-    const { luminosidade_lux, power_w, deviceId } = reading;
+    try {
+        const { deviceId } = reading;
+        const now = new Date();
 
-    const isBadReading = luminosidade_lux >= LUX_HIGH_THRESHOLD && power_w <= POWER_LOW_THRESHOLD;
+        // 1. Check if we should generate an alert
+        const thirtyMinutesAgo = new Date(now.getTime() - ALERT_WINDOW_MS);
 
-    if (isBadReading) {
-        const currentCount = (consecutiveBadReadings.get(deviceId) || 0) + 1;
-        consecutiveBadReadings.set(deviceId, currentCount);
+        const stats = await Reading.aggregate([
+            {
+                $match: {
+                    device: device._id,
+                    received_at: { $gte: thirtyMinutesAgo }
+                }
+            },
+            {
+                $facet: {
+                    total: [{ $count: "count" }],
+                    bad: [
+                        {
+                            $match: {
+                                luminosidade_lux: { $gte: LUX_HIGH_THRESHOLD },
+                                power_w: { $lte: POWER_LOW_THRESHOLD }
+                            }
+                        },
+                        { $count: "count" }
+                    ]
+                }
+            }
+        ]);
 
-        if (currentCount >= ALERT_CONSECUTIVE_N) {
-            // Check if there's already an open alert for this device
+        const totalReadings = stats[0].total[0]?.count || 0;
+        const badReadings = stats[0].bad[0]?.count || 0;
+        const badRatio = totalReadings > 0 ? badReadings / totalReadings : 0;
+
+        if (badRatio >= ALERT_THRESHOLD_RATIO && totalReadings >= 3) { // Require at least 3 readings for statistical significance
             const openAlert = await Alert.findOne({
                 device: device._id,
                 status: 'open',
@@ -30,15 +56,43 @@ const processReadingForAlerts = async (reading, device) => {
                     device: device._id,
                     deviceId: device.deviceId,
                     type: 'NEEDS_CLEANING',
-                    message: `Luminosidade alta (${luminosidade_lux} lux) mas potência baixa (${power_w.toFixed(2)} W). A placa pode estar suja.`,
-                    consecutiveCount: currentCount
+                    message: `Possível sujeira na placa: ${badReadings}/${totalReadings} medições (${(badRatio * 100).toFixed(0)}%) nos últimos 30 min com luz alta e potência baixa.`,
                 });
-                console.log(`⚠️ Alerta criado para o device ${deviceId}`);
+                console.log(`⚠️ [ALERTA CRIADO] Device: ${deviceId} - Razão: Janela de 30min com ${badRatio.toFixed(2)} de bad readings.`);
             }
         }
-    } else {
-        // Reset count if reading is good
-        consecutiveBadReadings.set(deviceId, 0);
+
+        // 2. Check if we should resolve an existing alert
+        const openAlertToResolve = await Alert.findOne({
+            device: device._id,
+            status: 'open',
+            type: 'NEEDS_CLEANING'
+        });
+
+        if (openAlertToResolve) {
+            const tenMinutesAgo = new Date(now.getTime() - RESOLVE_WINDOW_MS);
+
+            // Check readings in the last 10 minutes
+            const recentReadings = await Reading.find({
+                device: device._id,
+                received_at: { $gte: tenMinutesAgo }
+            });
+
+            if (recentReadings.length > 0) {
+                const allGood = recentReadings.every(r => r.power_w > POWER_LOW_THRESHOLD);
+
+                if (allGood) {
+                    openAlertToResolve.status = 'resolved';
+                    openAlertToResolve.resolvedAt = now;
+                    await openAlertToResolve.save();
+                    console.log(`✅ [ALERTA RESOLVIDO] Device: ${deviceId} - Potência voltou ao normal nos últimos 10 min.`);
+                }
+            }
+        }
+
+    } catch (error) {
+        console.error("❌ Erro no alertService:", error);
+        // Error in alert analysis should not break the MQTT flow
     }
 };
 
